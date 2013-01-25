@@ -2,53 +2,51 @@ package dam.psp;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Scanner;
 
 public class HttpServer {
 
-	public static void main (String[]args) throws IOException {
+	final static String newLine = "\r\n";
+	
+	final static String fileNameError404 = "fileError404.html";
+	final static String response200 = "HTTP/1.0 200 OK";
+	final static String response404 = "HTTP/1.0 404 Not Found";
+	
+	static String response = response200;
+	
+	public static void main (String[]args) throws IOException, InterruptedException {
 		
-		final String newLine = "\r\n";
-		final int puerto = 8080;
-		final String fileNameError404 = "fileError404.html";
-		final String response200 = "HTTP/1.0 200 OK";
-		final String response404 = "HTTP/1.0 404 Not Found";
+		final int puerto = 8090;
 		ServerSocket serverSocket = new ServerSocket(puerto);
 		
-		Socket socket = serverSocket.accept();
-		
-		Scanner scanner = new Scanner(socket.getInputStream());
-		
-		String fileName = "index.html";
-		String response = response200;
-		
 		while(true) {
-			String line = scanner.nextLine();
-			System.out.println(line);
-			if(line.equals("")) {
-				break;
-			}
+		
+			Socket socket = serverSocket.accept();
+			
+//			SimpleServer simpleServer = new SimpleServer(socket);
+//			simpleServer.run();
+			
+			ThreadServer threadServer = new ThreadServer(socket);
+			new Thread(threadServer).start();
+			
 		}
+	}
+	
+	static void writeFile(OutputStream outputStream, String fileName) throws IOException {
 		
 		File file = new File(fileName);
+		
 		if(!file.exists()) {
 			fileName = fileNameError404;
 			response = response404;
 		}
 		
 		FileInputStream fileInputStream = new FileInputStream(fileName);
-		
-		String header = response + newLine + newLine;
-		byte[]headerBuffer = header.getBytes();
-		
-		OutputStream outputStream = socket.getOutputStream();
-		outputStream.write(headerBuffer, 0, headerBuffer.length);
 		
 		final int bufferSize = 2048;
 		byte[]buffer = new byte[bufferSize];
@@ -58,12 +56,96 @@ public class HttpServer {
 			outputStream.write(buffer, 0, count);
 		
 		fileInputStream.close();
+	}
+	
+	static void writeHeader(OutputStream outputStream, String fileName) throws IOException {
 		
-		socket.close();
-		serverSocket.close();
+		File file = new File(fileName);
 		
+		if(!file.exists()) {
+			fileName = fileNameError404;
+			response = response404;
+		}
+		
+		String header = response + newLine + newLine;
+		byte[]headerBuffer = header.getBytes();
+		
+		outputStream.write(headerBuffer);	
 	}
 
+	//TODO implementar correctamente
+	static String getFileName(InputStream inputStream) {
+		
+		Scanner scanner = new Scanner(inputStream);
+		
+		String fileName = "";
+		
+		while(true) {
+			String line = scanner.nextLine();
+			System.out.println(line);
+			if(line.contains("GET ")) {
+				char[]aux = line.toCharArray();
+				int i = 5;
+				
+				while(aux[i] != ' ') {
+					fileName += aux[i];
+					i++;
+				}
+			}
+			if(line.equals("")) {
+				break;
+			}
+		}
+		
+		return fileName;
+	}
+
+}
+
+class SimpleServer {
+	Socket socket;
+	
+	public SimpleServer(Socket s) {
+		socket = s;
+	}
+	
+	public void run() {
+		String fileName;
+		
+		try {
+			fileName = HttpServer.getFileName(socket.getInputStream());
+			HttpServer.writeHeader(socket.getOutputStream(), fileName);
+			HttpServer.writeFile(socket.getOutputStream(), fileName);
+			socket.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+	}
+}
+
+class ThreadServer implements Runnable {
+	Socket socket;
+	
+	public ThreadServer(Socket s) {
+		socket = s;
+	}
+	
+	public void run() {
+		String fileName;
+		
+		try {
+			fileName = HttpServer.getFileName(socket.getInputStream());
+			HttpServer.writeHeader(socket.getOutputStream(), fileName);
+			HttpServer.writeFile(socket.getOutputStream(), fileName);
+			socket.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+	}
 }
 
 
